@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PID Simulator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1e1e24;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            background: #2a2a35;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+        }
+        canvas {
+            background: #0d0d11;
+            border-radius: 8px;
+            border: 2px solid #444;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            width: 280px;
+            gap: 15px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            font-size: 16px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .latex {
+            font-family: "Times New Roman", Times, serif;
+            font-style: italic;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        button {
+            padding: 10px;
+            background: #00adb5;
+            border: none;
+            color: white;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover { background: #007a80; }
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <canvas id="simCanvas" width="500" height="400"></canvas>
+
+        <div class="controls">
+            <div class="control-group">
+                <label><span class="latex">K<sub>p</sub></span>: <span id="kpVal">0.08</span></label>
+                <input type="range" id="kpSlider" min="0" max="0.6" step="0.01" value="0.08">
+            </div>
+
+            <div class="control-group">
+                <label><span class="latex">K<sub>d</sub></span>: <span id="kdVal">1.20</span></label>
+                <input type="range" id="kdSlider" min="0" max="6.0" step="0.1" value="1.2">
+            </div>
+
+            <div class="btn-group">
+                <button id="perfectBtn">Perfect Value</button>
+                <button id="resetBtn">Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const targetY = 150;                
+        const groundY = canvas.height - 40; 
+        const rocketX = 120;                
+
+        let rocketY = groundY;              
+        let rocketVelocity = 0;             
+        const gravity = 0.25;               
+        
+        let lastError = groundY - targetY;  
+        let activeThrust = 0;               
+
+        let graphHistory = [];
+        const maxGraphPoints = 250;
+
+        const kpSlider = document.getElementById('kpSlider');
+        const kdSlider = document.getElementById('kdSlider');
+        const kpVal = document.getElementById('kpVal');
+        const kdVal = document.getElementById('kdVal');
+        const resetBtn = document.getElementById('resetBtn');
+        const perfectBtn = document.getElementById('perfectBtn');
+
+        function fixedPhysicsUpdate() {
+            let Kp = parseFloat(kpSlider.value);
+            let Kd = parseFloat(kdSlider.value);
+            
+            kpVal.innerText = Kp.toFixed(2);
+            kdVal.innerText = Kd.toFixed(2);
+
+            let error = rocketY - targetY;
+            let derivative = error - lastError;
+            lastError = error; 
+
+            activeThrust = (Kp * error) + (Kd * derivative);
+            activeThrust = Math.max(-2, Math.min(activeThrust, 15));
+
+            rocketVelocity += gravity;      
+            rocketVelocity -= activeThrust; 
+            
+            rocketY += rocketVelocity;
+
+            if (rocketY >= groundY) {
+                rocketY = groundY;
+                rocketVelocity = 0; 
+            }
+            if (rocketY <= 20) {
+                rocketY = 20;
+                rocketVelocity = 0; 
+            }
+
+            graphHistory.push(rocketY);
+            if (graphHistory.length > maxGraphPoints) {
+                graphHistory.shift();
+            }
+        }
+
+        function renderScene() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(250, targetY);
+            ctx.lineTo(canvas.width, targetY);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#ff007f'; 
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < graphHistory.length; i++) {
+                let x = 250 + (i * (canvas.width - 250) / maxGraphPoints);
+                let y = graphHistory[i];
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(240, 0);
+            ctx.lineTo(240, canvas.height);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#00adb5';
+            ctx.lineWidth = 3;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#00adb5';
+            ctx.beginPath();
+            ctx.moveTo(0, targetY);
+            ctx.lineTo(240, targetY);
+            ctx.stroke();
+            ctx.shadowBlur = 0; 
+
+            ctx.fillStyle = '#2d2d38';
+            ctx.fillRect(0, groundY + 15, canvas.width, canvas.height);
+            ctx.fillStyle = '#4e4e61';
+            ctx.fillRect(0, groundY + 15, canvas.width, 3);
+
+            if (activeThrust > 0.05 && rocketY < groundY) {
+                let fireLength = Math.min(activeThrust * 18, 90);
+                
+                ctx.fillStyle = '#ff5722';
+                ctx.beginPath();
+                ctx.moveTo(rocketX - 12, rocketY + 15);
+                ctx.lineTo(rocketX, rocketY + 15 + fireLength);
+                ctx.lineTo(rocketX + 12, rocketY + 15);
+                ctx.fill();
+
+                ctx.fillStyle = '#ffeb3b';
+                ctx.beginPath();
+                ctx.moveTo(rocketX - 6, rocketY + 15);
+                ctx.lineTo(rocketX, rocketY + 15 + (fireLength * 0.5));
+                ctx.lineTo(rocketX + 6, rocketY + 15);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = '#e1e1e1';
+            ctx.beginPath();
+            ctx.arc(rocketX, rocketY, 15, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#1e1e24';
+            ctx.beginPath();
+            ctx.arc(rocketX, rocketY - 2, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            requestAnimationFrame(renderScene);
+        }
+
+        resetBtn.addEventListener('click', () => {
+            rocketY = groundY; 
+            rocketVelocity = 0;
+            lastError = groundY - targetY;
+            graphHistory = []; 
+        });
+
+        perfectBtn.addEventListener('click', () => {
+            kpSlider.value = 0.40;
+            kdSlider.value = 4.50;
+            rocketY = groundY; 
+            rocketVelocity = 0;
+            lastError = groundY - targetY;
+            graphHistory = []; 
+        });
+
+        setInterval(fixedPhysicsUpdate, 1000 / 60); 
+        requestAnimationFrame(renderScene);         
+    </script>
+</body>
+</html>
