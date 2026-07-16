@@ -37,7 +37,7 @@ def main():
     # The Simulation
     simulation_config = SimulationCfg(dt=0.01)
     simulation = SimulationContext(simulation_config)
-    simulation.set_camera_view(eye=[2.0, 2.0, 1.5], target=[0.0, 0.0, 0.3])
+    simulation.set_camera_view(eye=[0.6, 0.6, 0.9], target=[0.0, 0.0, 0.8])
 
     create_scene()
     drone = drone_object()
