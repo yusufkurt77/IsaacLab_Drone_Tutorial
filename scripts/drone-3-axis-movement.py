@@ -60,6 +60,7 @@ def main():
 
     prop_joint_ids, prop_joint_names = drone.find_joints(".*rotor.*|.*prop.*|m[1-4]_joint")
     print(f"Found propeller joints: {prop_joint_names}")
+    print(f"All joint names on this asset: {drone.joint_names}")
 
     forces = torch.zeros(1, 1, 3, device = drone.device)
     torques = torch.zeros(1, 1, 3, device = drone.device)
@@ -75,8 +76,15 @@ def main():
 
     max_tilt = 0.3
 
-    base_spin = 60.0
-    spin_per_newton = 40.0
+    base_spin = 300.0
+    spin_per_newton = 150.0
+    # Manually tracked propeller angle - we write this directly to the sim each
+    # step instead of relying on set_joint_velocity_target, since that target
+    # has to be "chased" by the joint's own actuator (stiffness/damping/torque
+    # limits), and a weak or position-holding actuator can silently fail to
+    # reach it. Writing joint state directly guarantees the visual spin speed
+    # regardless of whatever actuator config this asset happens to have.
+    prop_angle = torch.zeros(1, len(prop_joint_ids), device=drone.device) if prop_joint_ids else None
 
     count = 0
     while simulation_app.is_running():
@@ -123,8 +131,9 @@ def main():
         # Cosmetic
         if prop_joint_ids:
             spin_speed = base_spin + spin_per_newton * thrust_z
+            prop_angle = (prop_angle + spin_speed * simulation_config.dt) % (2 * torch.pi)
             prop_vel = torch.full((1, len(prop_joint_ids)), spin_speed, device=drone.device)
-            drone.set_joint_velocity_target(prop_vel, joint_ids=prop_joint_ids)
+            drone.write_joint_state_to_sim(prop_angle, prop_vel, joint_ids=prop_joint_ids)
         
         drone.write_data_to_sim()
         simulation.step()
